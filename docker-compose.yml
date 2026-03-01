@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    ports: ["2181:2181"]
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on: [zookeeper]
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: custody
+    ports: ["3306:3306"]
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: audit
+    ports: ["5432:5432"]
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  # 各微服务（后面启动）
+  account-service:
+    build: ./custody-account
+    ports: ["8081:8080"]
+  # ... 其他服务类似
