@@ -1,0 +1,13 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: custody-sign
+  main:
+    banner-mode: off
+
+logging:
+  level:
+    root: INFO
+    com.custody: DEBUG
