@@ -4,6 +4,15 @@ server:
 spring:
   application:
     name: custody-sign
+  datasource:
+    url: jdbc:postgresql://localhost:5432/audit
+    username: postgres
+    password: 123456
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
   main:
     banner-mode: off
 
@@ -11,3 +20,4 @@ logging:
   level:
     root: INFO
     com.custody: DEBUG
+    org.springframework.orm.jpa: DEBUG

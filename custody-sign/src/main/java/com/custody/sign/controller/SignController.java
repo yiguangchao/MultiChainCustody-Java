@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/sign")
@@ -17,16 +19,20 @@ public class SignController {
 
     private final SignService signService;
 
-    @PostMapping("/ecdsa")
-    public ResponseEntity<String> signEcdsa(@RequestBody SignRequest request) {
+    @PostMapping("/threshold-ecdsa")
+    public ResponseEntity<String> thresholdSign(@RequestBody ThresholdSignRequest request) {
         try {
-            String signature = signService.signEcdsa(request.message(), request.privateKey());
-            return ResponseEntity.ok("Signature: " + signature);
+            signService.initDemoShares(request.privateKey());
+
+            String signature = signService.thresholdSignEcdsa(
+                    request.message(),
+                    request.shareIds()
+            );
+            return ResponseEntity.ok("Threshold Signature: " + signature);
         } catch (Exception e) {
-            log.error(e.getMessage());
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
     }
 }
 
-record SignRequest(String message, String privateKey) {}
+record ThresholdSignRequest(String message, String privateKey, List<Integer> shareIds) {}
