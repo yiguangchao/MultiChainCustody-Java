@@ -1,31 +1,60 @@
 package com.custody.sign.service;
 
-import lombok.extern.slf4j.Slf4j;
-import org.bouncycastle.asn1.sec.SECNamedCurves;
-import org.bouncycastle.asn1.x9.X9ECParameters;
+import com.codahale.shamir.Scheme;
+import com.custody.sign.entity.SignAuditLog;
+import com.custody.sign.repository.SignAuditLogRepository;
+import lombok.RequiredArgsConstructor;
 import org.bouncycastle.crypto.digests.SHA256Digest;
 import org.bouncycastle.crypto.params.ECDomainParameters;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.signers.ECDSASigner;
 import org.bouncycastle.util.encoders.Hex;
+import org.bouncycastle.asn1.sec.SECNamedCurves;
+import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.springframework.stereotype.Service;
-import org.bouncycastle.crypto.util.DigestFactory;
+import java.security.SecureRandom;
 import java.math.BigInteger;
-@Slf4j
+import java.time.LocalDateTime;
+import java.util.*;
+
 @Service
+@RequiredArgsConstructor
 public class SignService {
 
+    private final SignAuditLogRepository auditRepository;
+
     private static final String CURVE_NAME = "secp256k1";
+    private static final int TOTAL_SHARES = 3;
+    private static final int THRESHOLD = 2;
 
-    public String signEcdsa(String message, String privateKeyHex) throws Exception {
-        // 1. 解析 raw 私钥
-        byte[] privKeyBytes = Hex.decode(privateKeyHex);
-        if (privKeyBytes.length != 32) {
-            throw new IllegalArgumentException("Private key must be 32 bytes (64 hex chars)");
+    // 模拟私钥分片（实际生产中分片存储在不同地方）
+    private final Map<Integer, byte[]> shareMap = new HashMap<>();
+
+    // 初始化模拟分片（仅 demo 用，实际从配置/数据库加载）
+    public void initDemoShares(String rawPrivateKeyHex) {
+        byte[] masterKey = Hex.decode(rawPrivateKeyHex);
+        SecureRandom random = new SecureRandom();
+        Scheme scheme = new Scheme(random, TOTAL_SHARES, THRESHOLD);
+        Map<Integer, byte[]> shares = scheme.split(masterKey);
+        shareMap.putAll(shares);
+    }
+
+    public String thresholdSignEcdsa(String message, List<Integer> shareIds) throws Exception {
+        if (shareIds.size() < THRESHOLD) {
+            throw new IllegalArgumentException("Insufficient shares: need at least " + THRESHOLD);
         }
-        BigInteger privKey = new BigInteger(1, privKeyBytes);  // 正数表示
 
-        // 2. 获取 secp256k1 曲线参数 (BouncyCastle)
+        // 1. 计算消息哈希
+        byte[] messageBytes = message.getBytes("UTF-8");
+        SHA256Digest digest = new SHA256Digest();
+        digest.update(messageBytes, 0, messageBytes.length);
+        byte[] hash = new byte[digest.getDigestSize()];
+        digest.doFinal(hash, 0);
+
+        // 2. 收集分片并重构私钥（demo 简化，实际用 Lagrange 插值）
+        byte[] reconstructed = reconstructPrivateKey(shareIds);
+
+        // 3. secp256k1 参数
         X9ECParameters curveParams = SECNamedCurves.getByName(CURVE_NAME);
         ECDomainParameters domain = new ECDomainParameters(
                 curveParams.getCurve(),
@@ -35,39 +64,51 @@ public class SignService {
                 curveParams.getSeed()
         );
 
-        // 3. 创建 ECDSA 签名器
+        // 4. 签名
         ECDSASigner signer = new ECDSASigner();
-        signer.init(true, new ECPrivateKeyParameters(privKey, domain));
-        byte[] messageBytes = message.getBytes("UTF-8");
-        // 4. 计算消息哈希
-        SHA256Digest digest = new SHA256Digest();
-        digest.update(messageBytes, 0, messageBytes.length);
+        signer.init(true, new ECPrivateKeyParameters(new BigInteger(1, reconstructed), domain));
+        BigInteger[] sig = signer.generateSignature(hash);
 
-        byte[] hash = new byte[digest.getDigestSize()];  // 32 字节
-        digest.doFinal(hash, 0);
-
-        // 5. 签名
-        BigInteger[] signature = signer.generateSignature(hash);
-
-        // 6. 转换为可读格式
-        byte[] r = signature[0].toByteArray();
-        byte[] s = signature[1].toByteArray();
-
-        byte[] rPadded = padTo32(r);
-        byte[] sPadded = padTo32(s);
-
+        // 5. 格式化 r + s
+        byte[] r = padTo32(sig[0].toByteArray());
+        byte[] s = padTo32(sig[1].toByteArray());
         byte[] sigBytes = new byte[64];
-        System.arraycopy(rPadded, 0, sigBytes, 0, 32);
-        System.arraycopy(sPadded, 0, sigBytes, 32, 32);
+        System.arraycopy(r, 0, sigBytes, 0, 32);
+        System.arraycopy(s, 0, sigBytes, 32, 32);
 
-        return Hex.toHexString(sigBytes);
+        String signatureHex = Hex.toHexString(sigBytes);
+
+        // 6. 记录审计日志
+        SignAuditLog log = new SignAuditLog();
+        log.setRequestId(UUID.randomUUID().toString());
+        log.setMessageHash(Hex.toHexString(hash));
+        log.setSignerCount(shareIds.size() + "/" + TOTAL_SHARES);
+        log.setSignatureHex(signatureHex);
+        log.setSignTime(LocalDateTime.now());
+        log.setStatus("SUCCESS");
+        auditRepository.save(log);
+
+        return signatureHex;
+    }
+
+    // 模拟重构私钥（实际用 Shamir combine）
+    private byte[] reconstructPrivateKey(List<Integer> shareIds) {
+        SecureRandom random = new SecureRandom();
+        Scheme scheme = new Scheme(random, TOTAL_SHARES, THRESHOLD);
+        Map<Integer, byte[]> selectedShares = new HashMap<>();
+        for (int id : shareIds) {
+            if (shareMap.containsKey(id)) {
+                selectedShares.put(id, shareMap.get(id));
+            }
+        }
+        return scheme.join(selectedShares);
     }
 
     private byte[] padTo32(byte[] bytes) {
         if (bytes.length == 32) return bytes;
-        if (bytes.length > 32) throw new IllegalStateException("Too long");
-        byte[] padded = new byte[32];
-        System.arraycopy(bytes, 0, padded, 32 - bytes.length, bytes.length);
-        return padded;
+        byte[] result = new byte[32];
+        int offset = 32 - Math.min(bytes.length, 32);
+        System.arraycopy(bytes, Math.max(0, bytes.length - 32), result, offset, Math.min(bytes.length, 32));
+        return result;
     }
 }
