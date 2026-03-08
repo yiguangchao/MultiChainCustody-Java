@@ -42,7 +42,6 @@
             <artifactId>bitcoinj-core</artifactId>
             <version>0.16.2</version>
         </dependency>
-
         <dependency>
             <groupId>com.mmorrell</groupId>
             <artifactId>solanaj</artifactId>
