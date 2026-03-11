@@ -16,7 +16,6 @@ public class SolanaClient implements BlockchainClient {
 
     @Override
     public String generateAddress() {
-        // 生成新密钥对并返回公钥 base58 地址
         Keypair keypair = Keypair.generate();
         return keypair.getPublicKey().toBase58();
     }
