@@ -11,7 +11,6 @@ public class SolanaClient implements BlockchainClient {
     public SolanaClient() {
         // 正确初始化：用 Cluster.DEVNET 或自定义 URL
         this.client = new RpcClient(Cluster.DEVNET);
-        // 或自定义 RPC: new RpcClient("https://api.devnet.solana.com");
     }
 
     @Override
