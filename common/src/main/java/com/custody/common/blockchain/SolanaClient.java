@@ -30,7 +30,6 @@ public class SolanaClient implements BlockchainClient {
 
     @Override
     public BigInteger getLatestBlockHeight() throws Exception {
-        // getSlot() 返回当前 slot（Solana 的区块高度等价物）
         long slot = client.getApi().getSlot();
         return BigInteger.valueOf(slot);
     }
