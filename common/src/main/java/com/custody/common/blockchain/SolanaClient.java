@@ -5,9 +5,6 @@ import com.p2p.solana.rpc.types.Keypair;
 import java.math.BigInteger;
 
 public class SolanaClient implements BlockchainClient {
-	
-	
-	
 
     private final RpcClient client;
 
