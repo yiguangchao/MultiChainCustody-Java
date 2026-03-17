@@ -1,31 +1,34 @@
-package com.custody.common.blockchain;
-
-import com.paymennt.solana4j.SolanaClient;
-import com.paymennt.solana4j.rpc.Cluster;
-
+import com.p2p.solana.rpc.RpcClient;
+import com.p2p.solana.rpc.Cluster;
+import com.p2p.solana.rpc.types.PublicKey;
+import com.p2p.solana.rpc.types.Keypair;
 import java.math.BigInteger;
 
 public class SolanaClient implements BlockchainClient {
 
-    private final SolanaClient client;
+    private final RpcClient client;
 
     public SolanaClient() {
-        this.client = SolanaClient.getInstance(Cluster.DEVNET);
+        this.client = new RpcClient(Cluster.DEVNET);
     }
 
     @Override
     public String generateAddress() {
-        return client.createKeyPair().getPublicKey().toBase58();
+        Keypair keypair = Keypair.generate();
+        return keypair.getPublicKey().toBase58();
     }
 
     @Override
     public BigInteger getBalance(String address) throws Exception {
-        return client.getBalance(address).getValue();
+        PublicKey pubKey = new PublicKey(address);
+        long balanceLamports = client.getApi().getBalance(pubKey).getValue();
+        return BigInteger.valueOf(balanceLamports);
     }
 
     @Override
     public BigInteger getLatestBlockHeight() throws Exception {
-        return BigInteger.valueOf(client.getSlot());
+        long slot = client.getApi().getSlot();
+        return BigInteger.valueOf(slot);
     }
 
     @Override
